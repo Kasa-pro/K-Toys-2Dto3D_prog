@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D to 3D AI Generator</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; }
+        #controls { padding: 1rem; position: absolute; z-index: 10; background: #fff; }
+        #status { font-weight: bold; }
+        /* This makes the 3D canvas fill the whole screen */
+        canvas { display: block; }
+    </style>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+    </script>
+</head>
+<body>
+
+    <div id="controls">
+        <h1>2D to 3D AI Generator</h1>
+        <p>Upload a 2D image to convert it to a 3D model.</p>
+        <input type="file" id="imageInput" accept="image/*" />
+        <button id="generateButton">Generate Model</button>
+        <p id="status">Please select an image and click generate.</p>
+    </div>
+
+    <script type="module" src="app.js"></script>
+
+</body>
+</html>
