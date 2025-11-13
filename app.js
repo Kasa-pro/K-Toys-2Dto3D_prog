@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // --- (1) GLOBAL VARIABLES ---
 
 // PUT YOUR NEW REPLICATE API KEY HERE (for polling requests)
-const apiKey = "r8_7WubxKQUbQ4j1ZaQzi2M4zPC8XeYZfT2GMGtn"; 
+const apiKey = "r8_7iBGPXQW6bsrW87SiZHe2s6F4C0X35U1aS1PW"; 
 
 // Get references to the HTML elements
 const imageInput = document.getElementById('imageInput');
@@ -167,3 +167,4 @@ function loadModel(modelUrl) {
 // --- (5) START THE APP ---
 initThree();
 animate();
+
