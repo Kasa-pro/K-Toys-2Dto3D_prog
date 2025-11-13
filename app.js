@@ -6,7 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // --- (1) GLOBAL VARIABLES ---
 
 // PUT YOUR NEW REPLICATE API KEY HERE
-const apiKey = "r8_HzIzcffvc2YbW4Gan19VM0FNnJd7V38458p7M"; 
+const apiKey = "r8_ckbk0mdG1DWrvSG4hxn7x6JHFukZJd33ES3t8"; 
 
 // Get references to the HTML elements
 const imageInput = document.getElementById('imageInput');
