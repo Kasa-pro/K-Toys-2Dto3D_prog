@@ -5,8 +5,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- (1) GLOBAL VARIABLES ---
 
-// PUT YOUR SECRET KEY HERE
-const apiKey = "msy_o29s5pzvPJa7B5vMER334XxIvywh8iuiyLEX"; 
+// No API key needed for this public Hugging Face demo!
+// const apiKey = ""; // Keep this line commented or remove it
 
 // Get references to the HTML elements
 const imageInput = document.getElementById('imageInput');
@@ -58,18 +58,7 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// --- (3) API CALLING LOGIC ---
-
-// Add click event to the "Generate" button
-generateButton.addEventListener('click', handleGenerateClick);
-
-// ... (existing imports and global variables) ...
-
-// --- (2) THREE.JS SCENE SETUP (No changes here) ---
-
-// ... (existing initThree and animate functions) ...
-
-// --- (3) API CALLING LOGIC (BIG CHANGES HERE) ---
+// --- (3) API CALLING LOGIC (UPDATED FOR GRADIO HUGGING FACE) ---
 
 generateButton.addEventListener('click', handleGenerateClick);
 
@@ -97,39 +86,49 @@ async function handleGenerateClick() {
         return;
     }
 
-    statusText.innerText = "Image processed. Sending to Meshy AI...";
+    statusText.innerText = "Image processed. Sending to TripoSR AI...";
+
+    // --- Hugging Face Gradio API Endpoint ---
+    const gradioApiUrl = "https://gdtharusha-3d-modle-generator.hf.space/--replicas/v48hg/run/predict"; // THIS IS THE URL FROM YOUR SCREENSHOT!
 
     try {
-        // --- API CALL 1: Start the generation task ---
-        const response = await fetch("https://api.meshy.ai/v1/image-to-3d", { // NOTE: API endpoint changed in docs to /openapi/v1/image-to-3d but the one you had is probably correct for direct use
+        const response = await fetch(gradioApiUrl, {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json" // CRITICAL: Now sending JSON
+                "Content-Type": "application/json"
             },
-            // CRITICAL: Now sending a JSON body with image_url
+            // The 'data' array in the body must match the Gradio function's inputs
             body: JSON.stringify({
-                image_url: imageDataUri, // Use the base64 data URI here
-                // You can add optional parameters here if you want:
-                // ai_model: "latest", // Or "meshy-4" etc.
-                // should_texture: true,
-                // should_remesh: true
+                fn_index: 0, // This is typically 0 for the first function in a Gradio app
+                data: [
+                    imageDataUri, // The Base64 image
+                    0, // Corresponds to num_inference_steps (defaulting for now)
+                    20 // Corresponds to denoising_steps (defaulting for now)
+                ]
             })
         });
 
-        // The rest of your API error handling and polling logic
         if (!response.ok) {
-            // Added more detailed error logging from Meshy response
-            const errorData = await response.json(); 
-            throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
+            // Get more detailed error info from Hugging Face
+            const errorText = await response.text(); // Use text() because it might not be JSON
+            throw new Error(`API error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();
-        const resultId = data.result;
-        statusText.innerText = "Generation complete! Waiting for model to process... This may take a minute or two.";
+        console.log("Hugging Face API Response:", data); // Log the full response
 
-        // --- API CALL 2: Poll for the result ---
-        await pollForResult(resultId);
+        // Hugging Face Gradio APIs often return a list of outputs
+        // The GLB model URL should be in data.data[0] or similar
+        // Let's assume the first output is the GLB URL for now, but we may need to adjust
+        // Check the console.log output for the exact path!
+        const modelUrl = data.data[0]; // Assuming the first item in 'data' is the model URL
+
+        if (!modelUrl || typeof modelUrl !== 'string' || !modelUrl.endsWith('.glb')) {
+             throw new Error("Could not find a valid .glb model URL in the API response.");
+        }
+
+        statusText.innerText = "Generation complete! Loading 3D model...";
+        loadModel(modelUrl);
 
     } catch (error) {
         console.error("Error during API call:", error);
@@ -137,7 +136,7 @@ async function handleGenerateClick() {
     }
 }
 
-// NEW HELPER FUNCTION: Convert File object to Base64 Data URI
+// NEW HELPER FUNCTION: Convert File object to Base64 Data URI (Same as before)
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -147,50 +146,11 @@ function fileToBase64(file) {
     });
 }
 
-// ... (rest of pollForResult and loadModel functions remain the same) ...
-
-// Utility function to make the code wait
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function pollForResult(resultId) {
-    while (true) {
-        try {
-            const pollResponse = await fetch(`https://api.meshy.ai/v1/image-to-3d/${resultId}`, {
-                method: "GET",
-                headers: {
-                    "Authorization": `Bearer ${apiKey}`
-                }
-            });
-
-            const pollData = await pollResponse.json();
-
-            if (pollData.status === 'SUCCEEDED') {
-                // SUCCESS! Get the model URL and load it
-                const modelUrl = pollData.model_url; // This is the .glb file URL
-                statusText.innerText = "Generation complete! Loading 3D model...";
-                loadModel(modelUrl);
-                break; // Exit the loop
-
-            } else if (pollData.status === 'FAILED') {
-                throw new Error("Model generation failed.");
-
-            } else {
-                // It's still 'PROCESSING'. Wait 5 seconds and check again.
-                await sleep(5000); 
-            }
-        } catch (error) {
-            console.error("Error during polling:", error);
-            statusText.innerText = `Error: ${error.message}`;
-            break; // Exit loop on error
-        }
-    }
-}
-
-// --- (4) 3D MODEL LOADING ---
+// --- (4) 3D MODEL LOADING (Same as before) ---
 
 function loadModel(modelUrl) {
     const loader = new GLTFLoader();
-    
+
     loader.load(
         modelUrl,
         // (gltf) is the loaded 3D model data
@@ -198,6 +158,10 @@ function loadModel(modelUrl) {
             currentModel = gltf.scene; // Save the model
             scene.add(currentModel); // Add model to the 3D world
             statusText.innerText = "Model loaded! Click and drag to rotate.";
+
+            // Optional: Adjust model scale/position if it's too big/small
+            // gltf.scene.scale.set(0.1, 0.1, 0.1);
+            // gltf.scene.position.set(0, -1, 0);
         },
         // (xhr) is the loading progress
         function (xhr) {
@@ -212,8 +176,6 @@ function loadModel(modelUrl) {
     );
 }
 
-
 // --- (5) START THE APP ---
 initThree();
-
 animate();
