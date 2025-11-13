@@ -1,0 +1,15 @@
+{
+  "name": "2d-to-3d-generator",
+  "version": "1.0.0",
+  "description": "A web app to generate 3D models from 2D images using Replicate API and Netlify Functions.",
+  "main": "app.js",
+  "scripts": {
+    "start": "netlify dev"
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "node-fetch": "^2.6.7"  // <--- This is the CRUCIAL line!
+  }
+}
