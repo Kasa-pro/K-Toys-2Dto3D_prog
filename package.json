@@ -10,6 +10,6 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "node-fetch": "^2.6.7"  // <--- This is the CRUCIAL line!
+    "node-fetch": "^2.6.7"  
   }
 }
