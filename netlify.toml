@@ -1,0 +1,8 @@
+[build]
+  publish = "." # Your website files are in the root directory
+  functions = "netlify/functions" # This tells Netlify where to look for your serverless functions
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/replicate-proxy/:splat" # This redirects /api/anything to your function
+  status = 200
