@@ -63,6 +63,16 @@ function animate() {
 // Add click event to the "Generate" button
 generateButton.addEventListener('click', handleGenerateClick);
 
+// ... (existing imports and global variables) ...
+
+// --- (2) THREE.JS SCENE SETUP (No changes here) ---
+
+// ... (existing initThree and animate functions) ...
+
+// --- (3) API CALLING LOGIC (BIG CHANGES HERE) ---
+
+generateButton.addEventListener('click', handleGenerateClick);
+
 async function handleGenerateClick() {
     const file = imageInput.files[0];
     if (!file) {
@@ -75,31 +85,48 @@ async function handleGenerateClick() {
         scene.remove(currentModel);
     }
 
-    statusText.innerText = "Uploading image...";
+    statusText.innerText = "Processing image...";
 
-    // 1. Create FormData to send the file
-    const formData = new FormData();
-    formData.append('image_file', file);
+    // 1. Convert the uploaded file to a Base64 Data URI
+    let imageDataUri;
+    try {
+        imageDataUri = await fileToBase64(file);
+    } catch (error) {
+        statusText.innerText = `Error processing image: ${error.message}`;
+        console.error("Error converting file to Base64:", error);
+        return;
+    }
+
+    statusText.innerText = "Image processed. Sending to Meshy AI...";
 
     try {
         // --- API CALL 1: Start the generation task ---
-        const response = await fetch("https://api.meshy.ai/v1/image-to-3d", {
+        const response = await fetch("https://api.meshy.ai/v1/image-to-3d", { // NOTE: API endpoint changed in docs to /openapi/v1/image-to-3d but the one you had is probably correct for direct use
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${apiKey}`
-                // Note: Don't set 'Content-Type' here; 
-                // the browser sets it automatically with FormData
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json" // CRITICAL: Now sending JSON
             },
-            body: formData
+            // CRITICAL: Now sending a JSON body with image_url
+            body: JSON.stringify({
+                image_url: imageDataUri, // Use the base64 data URI here
+                // You can add optional parameters here if you want:
+                // ai_model: "latest", // Or "meshy-4" etc.
+                // should_texture: true,
+                // should_remesh: true
+            })
         });
 
+        // The rest of your API error handling and polling logic
         if (!response.ok) {
-            throw new Error(`API error: ${response.statusText}`);
+            // Added more detailed error logging from Meshy response
+            const errorData = await response.json(); 
+            throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
         }
 
         const data = await response.json();
         const resultId = data.result;
-        statusText.innerText = "Generating model... This may take a minute. Please wait.";
+        statusText.innerText = "Generation complete! Waiting for model to process... This may take a minute or two.";
 
         // --- API CALL 2: Poll for the result ---
         await pollForResult(resultId);
@@ -109,6 +136,18 @@ async function handleGenerateClick() {
         statusText.innerText = `Error: ${error.message}. Check console for details.`;
     }
 }
+
+// NEW HELPER FUNCTION: Convert File object to Base64 Data URI
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+}
+
+// ... (rest of pollForResult and loadModel functions remain the same) ...
 
 // Utility function to make the code wait
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -176,4 +215,5 @@ function loadModel(modelUrl) {
 
 // --- (5) START THE APP ---
 initThree();
+
 animate();
