@@ -5,8 +5,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- (1) GLOBAL VARIABLES ---
 
-// No API key needed for this public Hugging Face demo!
-// const apiKey = ""; // Keep this line commented or remove it
+// PUT YOUR NEW REPLICATE API KEY HERE
+const apiKey = "r8_HzIzcffvc2YbW4Gan19VM0FNnJd7V38458p7M"; 
 
 // Get references to the HTML elements
 const imageInput = document.getElementById('imageInput');
@@ -17,33 +17,23 @@ let scene, camera, renderer, controls;
 let currentModel; // A variable to hold the current model
 
 // --- (2) THREE.JS SCENE SETUP ---
+// (This section is identical to before, no changes needed)
 
 function initThree() {
-    // Scene (the 3D world)
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xdddddd); // Light gray background
-
-    // Camera (what you see)
+    scene.background = new THREE.Color(0xdddddd);
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.z = 5;
-
-    // Renderer (draws the scene on the screen)
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement); // Add the canvas to the page
-
-    // Lights
+    document.body.appendChild(renderer.domElement);
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(1, 1, 1);
     scene.add(directionalLight);
-
-    // Controls (to rotate/zoom with mouse)
     controls = new OrbitControls(camera, renderer.domElement);
     controls.update();
-
-    // Handle window resizing
     window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
@@ -58,9 +48,12 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-// --- (3) API CALLING LOGIC (UPDATED FOR GRADIO HUGGING FACE) ---
+// --- (3) API CALLING LOGIC (UPDATED FOR REPLICATE) ---
 
 generateButton.addEventListener('click', handleGenerateClick);
+
+// Utility function to make the code wait
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function handleGenerateClick() {
     const file = imageInput.files[0];
@@ -69,7 +62,6 @@ async function handleGenerateClick() {
         return;
     }
 
-    // Clear any old model from the scene
     if (currentModel) {
         scene.remove(currentModel);
     }
@@ -82,49 +74,63 @@ async function handleGenerateClick() {
         imageDataUri = await fileToBase64(file);
     } catch (error) {
         statusText.innerText = `Error processing image: ${error.message}`;
-        console.error("Error converting file to Base64:", error);
         return;
     }
 
-    statusText.innerText = "Image processed. Sending to TripoSR AI...";
-
-    // --- Hugging Face Gradio API Endpoint ---
-    const gradioApiUrl = "https://gdtharusha-3d-modle-generator.hf.space/--replicas/v48hg/run/predict"; // THIS IS THE URL FROM YOUR SCREENSHOT!
+    statusText.innerText = "Starting 3D model generation...";
 
     try {
-        const response = await fetch(gradioApiUrl, {
+        // --- API CALL 1: Start the Replicate prediction ---
+        // This first call just starts the job
+        const response = await fetch("https://api.replicate.com/v1/predictions", {
             method: "POST",
             headers: {
+                "Authorization": `Bearer ${apiKey}`,
                 "Content-Type": "application/json"
             },
-            // The 'data' array in the body must match the Gradio function's inputs
             body: JSON.stringify({
-                fn_index: 0, // This is typically 0 for the first function in a Gradio app
-                data: [
-                    imageDataUri, // The Base64 image
-                    0, // Corresponds to num_inference_steps (defaulting for now)
-                    20 // Corresponds to denoising_steps (defaulting for now)
-                ]
+                // This is the specific "version" for the TripoSR model on Replicate
+                version: "d432953e1bABc455c1F6E13C41D7d751B7863E5668d2eC003639C095E7C803E1",
+                input: {
+                    image: imageDataUri // Send the Base64 image
+                }
             })
         });
 
         if (!response.ok) {
-            // Get more detailed error info from Hugging Face
-            const errorText = await response.text(); // Use text() because it might not be JSON
-            throw new Error(`API error: ${response.status} - ${errorText}`);
+            const errorData = await response.json();
+            throw new Error(`API error: ${response.status} - ${errorData.detail}`);
         }
 
-        const data = await response.json();
-        console.log("Hugging Face API Response:", data); // Log the full response
+        const prediction = await response.json();
+        const pollUrl = prediction.urls.get; // This is the URL we need to check for the result
 
-        // Hugging Face Gradio APIs often return a list of outputs
-        // The GLB model URL should be in data.data[0] or similar
-        // Let's assume the first output is the GLB URL for now, but we may need to adjust
-        // Check the console.log output for the exact path!
-        const modelUrl = data.data[0]; // Assuming the first item in 'data' is the model URL
+        statusText.innerText = "Model is 'warming up'... Please wait.";
 
-        if (!modelUrl || typeof modelUrl !== 'string' || !modelUrl.endsWith('.glb')) {
-             throw new Error("Could not find a valid .glb model URL in the API response.");
+        // --- API CALL 2: Poll for the result ---
+        let modelUrl = null;
+        while (!modelUrl) {
+            const pollResponse = await fetch(pollUrl, {
+                method: "GET",
+                headers: {
+                    "Authorization": `Bearer ${apiKey}`
+                }
+            });
+
+            const pollData = await pollResponse.json();
+
+            if (pollData.status === 'succeeded') {
+                // SUCCESS! The output is a URL to the .glb file
+                modelUrl = pollData.output;
+                break; // Exit the loop
+
+            } else if (pollData.status === 'failed' || pollData.status === 'canceled') {
+                throw new Error(`Model generation failed: ${pollData.error}`);
+            
+            } else {
+                // It's still 'starting' or 'processing'. Wait 3 seconds.
+                await sleep(3000);
+            }
         }
 
         statusText.innerText = "Generation complete! Loading 3D model...";
@@ -132,11 +138,11 @@ async function handleGenerateClick() {
 
     } catch (error) {
         console.error("Error during API call:", error);
-        statusText.innerText = `Error: ${error.message}. Check console for details.`;
+        statusText.innerText = `Error: ${error.message}. Check console.`;
     }
 }
 
-// NEW HELPER FUNCTION: Convert File object to Base64 Data URI (Same as before)
+// HELPER FUNCTION: Convert File object to Base64 Data URI
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -146,29 +152,23 @@ function fileToBase64(file) {
     });
 }
 
-// --- (4) 3D MODEL LOADING (Same as before) ---
+// --- (4) 3D MODEL LOADING ---
+// (This section is identical to before, no changes needed)
 
 function loadModel(modelUrl) {
     const loader = new GLTFLoader();
-
+    
     loader.load(
         modelUrl,
-        // (gltf) is the loaded 3D model data
         function (gltf) {
-            currentModel = gltf.scene; // Save the model
-            scene.add(currentModel); // Add model to the 3D world
+            currentModel = gltf.scene;
+            scene.add(currentModel);
             statusText.innerText = "Model loaded! Click and drag to rotate.";
-
-            // Optional: Adjust model scale/position if it's too big/small
-            // gltf.scene.scale.set(0.1, 0.1, 0.1);
-            // gltf.scene.position.set(0, -1, 0);
         },
-        // (xhr) is the loading progress
         function (xhr) {
             const percentLoaded = (xhr.loaded / xhr.total * 100).toFixed(2);
             statusText.innerText = `Loading model... ${percentLoaded}%`;
         },
-        // (error) is called if something goes wrong
         function (error) {
             console.error("An error happened while loading the model:", error);
             statusText.innerText = "Error: Could not load the 3D model.";
