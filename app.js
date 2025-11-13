@@ -5,8 +5,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // --- (1) GLOBAL VARIABLES ---
 
-// PUT YOUR NEW REPLICATE API KEY HERE
-const apiKey = "r8_ckbk0mdG1DWrvSG4hxn7x6JHFukZJd33ES3t8"; 
+// PUT YOUR NEW REPLICATE API KEY HERE (for polling requests)
+const apiKey = "r8_7WubxKQUbQ4j1ZaQzi2M4zPC8XeYZfT2GMGtn"; 
 
 // Get references to the HTML elements
 const imageInput = document.getElementById('imageInput');
@@ -14,10 +14,9 @@ const generateButton = document.getElementById('generateButton');
 const statusText = document.getElementById('status');
 
 let scene, camera, renderer, controls;
-let currentModel; // A variable to hold the current model
+let currentModel; 
 
 // --- (2) THREE.JS SCENE SETUP ---
-// (This section is identical to before, no changes needed)
 
 function initThree() {
     scene = new THREE.Scene();
@@ -41,18 +40,15 @@ function initThree() {
     });
 }
 
-// Animation Loop (runs 60 times/sec)
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
     renderer.render(scene, camera);
 }
 
-// --- (3) API CALLING LOGIC (UPDATED FOR REPLICATE) ---
+// --- (3) API CALLING LOGIC (UPDATED FOR NETLIFY PROXY + REPLICATE) ---
 
 generateButton.addEventListener('click', handleGenerateClick);
-
-// Utility function to make the code wait
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function handleGenerateClick() {
@@ -68,7 +64,6 @@ async function handleGenerateClick() {
 
     statusText.innerText = "Processing image...";
 
-    // 1. Convert the uploaded file to a Base64 Data URI
     let imageDataUri;
     try {
         imageDataUri = await fileToBase64(file);
@@ -80,55 +75,50 @@ async function handleGenerateClick() {
     statusText.innerText = "Starting 3D model generation...";
 
     try {
-        // --- API CALL 1: Start the Replicate prediction ---
-        // This first call just starts the job
-        const response = await fetch("https://api.replicate.com/v1/predictions", {
+        // --- API CALL 1: Start the Replicate prediction (VIA YOUR NETLIFY PROXY) ---
+        const response = await fetch("/api/replicate", { // This calls YOUR Netlify proxy
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${apiKey}`,
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                // This is the specific "version" for the TripoSR model on Replicate
                 version: "d432953e1bABc455c1F6E13C41D7d751B7863E5668d2eC003639C095E7C803E1",
                 input: {
-                    image: imageDataUri // Send the Base64 image
+                    image: imageDataUri
                 }
             })
         });
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(`API error: ${response.status} - ${errorData.detail}`);
+            throw new Error(`Proxy error: ${response.status} - ${errorData.detail}`);
         }
 
         const prediction = await response.json();
-        const pollUrl = prediction.urls.get; // This is the URL we need to check for the result
+        const pollUrl = prediction.urls.get; 
 
         statusText.innerText = "Model is 'warming up'... Please wait.";
 
-        // --- API CALL 2: Poll for the result ---
+        // --- API CALL 2: Poll for the result (DIRECTLY to Replicate) ---
         let modelUrl = null;
         while (!modelUrl) {
-            const pollResponse = await fetch(pollUrl, {
+            const pollResponse = await fetch(pollUrl, { // Direct call to Replicate
                 method: "GET",
                 headers: {
-                    "Authorization": `Bearer ${apiKey}`
+                    "Authorization": `Token ${apiKey}` // Using the API key from top of app.js
                 }
             });
 
             const pollData = await pollResponse.json();
 
             if (pollData.status === 'succeeded') {
-                // SUCCESS! The output is a URL to the .glb file
                 modelUrl = pollData.output;
-                break; // Exit the loop
+                break;
 
             } else if (pollData.status === 'failed' || pollData.status === 'canceled') {
                 throw new Error(`Model generation failed: ${pollData.error}`);
-            
+
             } else {
-                // It's still 'starting' or 'processing'. Wait 3 seconds.
                 await sleep(3000);
             }
         }
@@ -142,7 +132,6 @@ async function handleGenerateClick() {
     }
 }
 
-// HELPER FUNCTION: Convert File object to Base64 Data URI
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -153,11 +142,10 @@ function fileToBase64(file) {
 }
 
 // --- (4) 3D MODEL LOADING ---
-// (This section is identical to before, no changes needed)
 
 function loadModel(modelUrl) {
     const loader = new GLTFLoader();
-    
+
     loader.load(
         modelUrl,
         function (gltf) {
